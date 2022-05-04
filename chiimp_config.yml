@@ -1,0 +1,9 @@
+fp_dataset: samples.csv
+fp_locus_attrs: locus_attrs.csv
+dataset_analysis:
+  ncores: 12
+output:
+  dp: results
+  fp_rds: results.rds
+sample_summary_opts:
+  counts.min: 16

@@ -1,8 +1,130 @@
-from csv import DictReader
+from csv import DictReader, DictWriter
+from pathlib import Path
 
-with open("metadata/SraRunTable.csv") as f_in:
-    RUNINFO = list(DictReader(f_in))
-SAMPLE_MAP = {row["Sample Name"]: row["Run"] for row in RUNINFO}
+TABLES = {}
+for path in Path("from-paper").glob("*.csv"):
+    with open(path) as f_in:
+        TABLES[path.stem] = list(DictReader(f_in))
+
+EXTRA = {}
+for path in Path("metadata").glob("*.csv"):
+    with open(path) as f_in:
+        EXTRA[path.stem] = list(DictReader(f_in))
+
+SAMPLE_MAP = {row["Sample Name"]: row["Run"] for row in EXTRA["SraRunTable"]}
+
+### CHIIMP
+
+rule chiimp_run:
+    output: "analysis/chiimp/results/results.rds"
+    input:
+        samples=expand("data/{sample}.{read}.fastq.gz", sample=SAMPLE_MAP.keys(), read=["1", "2"]),
+        config="analysis/chiimp/config.yml",
+        samples_csv="analysis/chiimp/samples.csv",
+        locus_attrs="analysis/chiimp/locus_attrs.csv"
+    threads: 12 # separately defined in config.yml
+    shell:
+        "cd $(dirname {input.config}) && chiimp $(basename {input.config})"
+
+rule chiimp_config:
+    output: "analysis/chiimp/config.yml"
+    input: "chiimp_config.yml"
+    shell: "cp {input} {output}"
+
+rule chiimp_make_samples:
+    output: "analysis/chiimp/samples.csv"
+    input:
+        sra="metadata/SraRunTable.csv",
+        loci="analysis/chiimp/locus_attrs.csv"
+    run:
+        with open(input.loci) as f_in:
+            loci = list(DictReader(f_in))
+        fields = ["Sample", "Replicate", "Locus", "Filename", "Sex", "Subspecies"]
+        rows_out = []
+        with open(input[0]) as f_in:
+            for row in DictReader(f_in):
+                for locus_row in loci:
+                    sample, rep = row["Sample Name"].split("_")
+                    file_path = Path(".").resolve() / "analysis/trim" / (row["Sample Name"] + ".1.fastq.gz")
+                    rows_out.append({
+                        "Sample": sample,
+                        "Replicate": rep,
+                        "Locus": locus_row["Locus"],
+                        "Filename": file_path})
+        rows_out = sorted(rows_out, key=lambda row: (row["Sample"], row["Replicate"], row["Locus"]))
+        with open(output[0], "wt") as f_out:
+            writer = DictWriter(
+                f_out,
+                fieldnames=["Sample", "Replicate", "Locus", "Filename"],
+                lineterminator="\n")
+            writer.writeheader()
+            writer.writerows(rows_out)
+
+rule chiimp_make_locus_attrs:
+    output: "analysis/chiimp/locus_attrs.csv"
+    input:
+        tableS1="from-paper/tableS1.csv",
+        extra="metadata/loci.csv"
+    run:
+        fields = [
+            "Locus", "LengthMin", "LengthMax", "LengthBuffer",
+            "Motif", "Primer", "ReversePrimer"]
+        def getsize(txt):
+            parts = [int(x) if x != "" else 0 for x in re.sub("[^-0-9]*", "", txt).split("-")]
+            if len(parts) < 2:
+                parts = [parts[0] - 10, parts[0] + 10]
+            return parts
+        extra = {}
+        with open(input.extra) as f_in:
+            for row in DictReader(f_in):
+                extra[row["Locus"]] = row
+        with open(input.tableS1) as f_in, open(output[0], "wt") as f_out:
+            writer = DictWriter(f_out, fieldnames=fields, lineterminator="\n")
+            writer.writeheader()
+            for row in DictReader(f_in):
+                if row["Selected"] == "X":
+                    parts = getsize(row["Allele Size (bp)"])
+                    writer.writerow({
+                        "Locus": row["Locus name"],
+                        "LengthMin": parts[0],
+                        "LengthMax": parts[1],
+                        "LengthBuffer": 40,
+                        "Motif": extra[row["Locus name"]]["Motif"],
+                        "Primer": row["Forward primer (5' -> 3')"],
+                        "ReversePrimer": row["Reverse primer (5' -> 3')"]})
+
+### Trim adapters
+
+rule cutadapt_all:
+    input: expand("analysis/trim/{sample}.{read}.fastq.gz", sample=SAMPLE_MAP.keys(), read=["1", "2"])
+
+# Near the end of R1 I see:
+# GATCGGAAGAGCACACGTCTGAACTCCAGTCAC
+# And just before R1:
+# ACACTCTTTCCCTACACGACGCTCTTCCGATCT
+# Thse match TruSeq adapters here:
+# http://tucf-genomics.tufts.edu/documents/protocols/TUCF_Understanding_Illumina_TruSeq_Adapters.pdf
+# https://dnatech.genomecenter.ucdavis.edu/wp-content/uploads/2013/06/illumina-adapter-sequences_1000000002694-00.pdf
+rule cutadapt:
+    output:
+        report="analysis/trim/{sample}.report.json",
+        reads=expand("analysis/trim/{{sample}}.{read}.fastq.gz", read=[1, 2])
+    input: expand("data/{{sample}}.{read}.fastq.gz", read=[1, 2])
+    params:
+        adapter_fwd="GATCGGAAGAGCACACGTCTGAACTCCAGTCAC",
+        adapter_rev="AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT" # or revcmp??
+    threads: 4
+    shell:
+        """
+            cutadapt --json {output.report} \
+                --cores {threads} \
+                -a {params.adapter_fwd} \
+                -A {params.adapter_rev} \
+                -o {output.reads[0]} -p {output.reads[1]} \
+                {input}
+        """
+
+### SRA download
 
 rule prep_sample_fastq_all:
     input: expand("data/{sample}.{read}.fastq.gz", sample=SAMPLE_MAP.keys(), read=["1", "2"])
@@ -13,7 +135,7 @@ rule prep_sample_fastq:
     shell: "ln -s ../{input} {output}"
 
 rule get_sra_all:
-    input: expand("sra/{SRR}_{read}.fastq.gz", SRR=[row["Run"] for row in RUNINFO], read=["1", "2"])
+    input: expand("sra/{SRR}_{read}.fastq.gz", SRR=SAMPLE_MAP.values(), read=["1", "2"])
 
 rule sra_fqgz:
     output: "sra/{SRR}_{read}.fastq.gz"
@@ -21,5 +143,6 @@ rule sra_fqgz:
     shell: "gzip < {input} > {output}"
 
 rule get_sra:
-    output: temp("sra/{SRR}_{read}.fastq")
-    shell: "fastq-dump --split-3 -O $(dirname {output}) {wildcards.SRR}"
+    output: temp(expand("sra/{{SRR}}_{read}.fastq", read=[1, 2]))
+    params: outdir="sra"
+    shell: "fastq-dump --split-3 -O {params.outdir} {wildcards.SRR}"

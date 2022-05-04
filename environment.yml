@@ -13,7 +13,15 @@ dependencies:
   - perl
   - perl-parallel-forkmanager
   # For CHIIMP
+  - cutadapt
   - pandoc
+  - r-argparser
+  - r-devtools
+  - r-kableextra
+  - r-knitr
+  - r-pheatmap
+  - r-viridis
+  - r-yaml
   # For my own code here
   - sra-tools>=2.11,<3
   - snakemake

@@ -1,0 +1,11 @@
+# conda environment setup YAML
+name: paper-helper-salado-2021
+channels:
+  - bioconda
+  - conda-forge
+dependencies:
+  - sra-tools>=2.11,<3
+  - biopython>=1.79,<2
+  - r
+  - r-ggplot2
+  - r-arsenal

@@ -1,3 +1,6 @@
 [submodule "MEGASAT"]
 	path = MEGASAT
 	url = https://github.com/beiko-lab/MEGASAT.git
+[submodule "chiimp"]
+	path = chiimp
+	url = https://github.com/ShawHahnLab/chiimp.git

@@ -38,20 +38,20 @@ for i in Nreads:
     replicates = 100
     seed(1)
 
-# Creating replicates of random number for each file(replicates=100):
-for j in range(1,replicates+1):
-    # Opening files from the path
-    for fastq in os.listdir(folder_path_in):
-        if fastq.endswith(".fastq"):
-            ruta = folder_path_in + '/' + fastq
-            seq_list = list(SeqIO.parse(ruta, "fastq"))
-            totseq = len(seq_list)
-            # random.sample () subsamples sequences without replacement
-            choice = random.sample(seq_list, i)
-            #Writing the output list to a new subsampled fastq file
-            ruta_out = folder_path_out + '/' + 'sub-' + 'Nreads' + str(i) \
-            + '-' + 'Rep' + str(j) + '-' + fastq
-            SeqIO.write(choice, ruta_out, "fastq")
+    # Creating replicates of random number for each file(replicates=100):
+    for j in range(1,replicates+1):
+        # Opening files from the path
+        for fastq in os.listdir(folder_path_in):
+            if fastq.endswith(".fastq"):
+                ruta = folder_path_in + '/' + fastq
+                seq_list = list(SeqIO.parse(ruta, "fastq"))
+                totseq = len(seq_list)
+                # random.sample () subsamples sequences without replacement
+                choice = random.sample(seq_list, i)
+                #Writing the output list to a new subsampled fastq file
+                ruta_out = folder_path_out + '/' + 'sub-' + 'Nreads' + str(i) \
+                + '-' + 'Rep' + str(j) + '-' + fastq
+                SeqIO.write(choice, ruta_out, "fastq")
 
 ## Organizing files and running Megasat (calling script in bash): ##
 subprocess.call("2_Managing_and_Genotyping.sh", shell=True)

@@ -1,0 +1,3 @@
+[submodule "MEGASAT"]
+	path = MEGASAT
+	url = https://github.com/beiko-lab/MEGASAT.git

@@ -4,8 +4,14 @@ channels:
   - bioconda
   - conda-forge
 dependencies:
-  - sra-tools>=2.11,<3
+  # For their scripts
   - biopython>=1.79,<2
   - r
   - r-ggplot2
   - r-arsenal
+  # For MEGASAT
+  - perl
+  - perl-parallel-forkmanager
+  # For my own code here
+  - sra-tools>=2.11,<3
+  - snakemake

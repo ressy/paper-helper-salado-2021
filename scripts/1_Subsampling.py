@@ -54,7 +54,7 @@ for j in range(1,replicates+1):
             SeqIO.write(choice, ruta_out, "fastq")
 
 ## Organizing files and running Megasat (calling script in bash): ##
-subprocess.call("./2_Managing_and_Genotyping.sh", shell=True)
+subprocess.call("2_Managing_and_Genotyping.sh", shell=True)
 
 ## Comparing of Megasat results and exporting final results (calling script in R):##
 subprocess.call("Rscript 3_Comparing_genotypes.R", shell=True)

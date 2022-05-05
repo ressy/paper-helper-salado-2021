@@ -13,7 +13,7 @@ dependencies:
   - perl
   - perl-parallel-forkmanager
   # For CHIIMP
-  - cutadapt
+  - cutadapt>=4.0,<5
   - pandoc
   - r-argparser
   - r-devtools
@@ -24,4 +24,6 @@ dependencies:
   - r-yaml
   # For my own code here
   - sra-tools>=2.11,<3
-  - snakemake
+  - snakemake>=7.6,<8
+  # Just for convenience
+  - seqmagick

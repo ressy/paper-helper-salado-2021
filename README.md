@@ -11,3 +11,7 @@ e0258906. <https://doi.org/10.1371/journal.pone.0258906>
     conda activate paper-helper-salado-2021
     ./chiimp/install_linux.sh
     export PATH="$CONDA_PREFIX/lib/R/library/chiimp/exec:$PATH"
+
+Misc notes:
+
+ * Allele Size in Table S1 seems to be excluding the sizes of both primers

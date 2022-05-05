@@ -1,5 +1,9 @@
 from csv import DictReader, DictWriter
 from pathlib import Path
+from math import ceil
+from Bio import SeqIO
+from Bio.SeqRecord import SeqRecord
+from Bio.Seq import Seq
 
 TABLES = {}
 for path in Path("from-paper").glob("*.csv"):
@@ -65,14 +69,21 @@ rule chiimp_make_locus_attrs:
     input:
         tableS1="from-paper/tableS1.csv",
         extra="metadata/loci.csv"
+    params:
+        length_buffer_fraction=0.2
     run:
         fields = [
             "Locus", "LengthMin", "LengthMax", "LengthBuffer",
             "Motif", "Primer", "ReversePrimer"]
-        def getsize(txt):
+        def getsize(row):
+            txt = row["Allele Size (bp)"]
             parts = [int(x) if x != "" else 0 for x in re.sub("[^-0-9]*", "", txt).split("-")]
             if len(parts) < 2:
                 parts = [parts[0] - 10, parts[0] + 10]
+            # I *think* the "allele size" they give is without primers.  I
+            # think.
+            extra = len(row["Forward primer (5' -> 3')"]) + len(row["Reverse primer (5' -> 3')"])
+            parts = [p + extra for p in parts]
             return parts
         extra = {}
         with open(input.extra) as f_in:
@@ -83,12 +94,15 @@ rule chiimp_make_locus_attrs:
             writer.writeheader()
             for row in DictReader(f_in):
                 if row["Selected"] == "X":
-                    parts = getsize(row["Allele Size (bp)"])
+                    parts = getsize(row)
+                    # 20% of average of length range, rounded up to nearest 10
+                    length_buffer = (parts[1] + parts[0])/2*params.length_buffer_fraction
+                    length_buffer = 10*ceil(length_buffer/10)
                     writer.writerow({
                         "Locus": row["Locus name"],
                         "LengthMin": parts[0],
                         "LengthMax": parts[1],
-                        "LengthBuffer": 40,
+                        "LengthBuffer": length_buffer,
                         "Motif": extra[row["Locus name"]]["Motif"],
                         "Primer": row["Forward primer (5' -> 3')"],
                         "ReversePrimer": row["Reverse primer (5' -> 3')"]})
@@ -146,3 +160,44 @@ rule get_sra:
     output: temp(expand("sra/{{SRR}}_{read}.fastq", read=[1, 2]))
     params: outdir="sra"
     shell: "fastq-dump --split-3 -O {params.outdir} {wildcards.SRR}"
+
+### Investigating reads by primer
+
+rule primer_split_all:
+    input: expand("analysis/primer-split/{thing}/{thing}-{primer}.1.fastq.gz", thing=SAMPLE_MAP.keys(), primer=[row["Locus name"] for row in TABLES["tableS1"]])
+
+rule primer_split:
+    output: expand("analysis/primer-split/{{thing}}/{{thing}}-{primer}.1.fastq.gz", primer=[row["Locus name"] for row in TABLES["tableS1"]])
+    input:
+        reads="analysis/trim/{thing}.1.fastq.gz",
+        primers="analysis/primer-split/primers_fwd.fasta"
+    threads: 4
+    params:
+        min_overlap=15,
+        # action for matching adapter seq:
+        # none means don't actually change the sequences
+        action="none"
+    shell:
+        """
+            cutadapt \
+                --cores {threads} \
+                --overlap {params.min_overlap} \
+                --action {params.action} \
+                -g file:{input.primers} \
+                -o analysis/primer-split/{wildcards.thing}/{wildcards.thing}-{{name}}.1.fastq.gz \
+                {input.reads}
+        """
+
+rule primer_split_prep_fasta:
+    output: "analysis/primer-split/primers_fwd.fasta"
+    input: "from-paper/tableS1.csv"
+    run:
+        with open(input[0]) as f_in, open(output[0], "wt") as f_out:
+            for row in DictReader(f_in):
+                SeqIO.write(
+                    SeqRecord(
+                        Seq("^" + row["Forward primer (5' -> 3')"]),
+                        id=row["Locus name"],
+                        description=""),
+                    f_out,
+                    "fasta-2line")

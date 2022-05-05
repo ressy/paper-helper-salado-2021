@@ -32,12 +32,14 @@ done
 
 for j in "${DIRNAME_REP[@]}"; do
 	mkdir "$dir"/concatenated/"${j[@]}"
-	mv $(find "$dir"/concatenated/ -name "${j[@]}-*fastq") \ "$dir"/concatenated/"${j[@]}"
+	mv $(find "$dir"/concatenated/ -name "${j[@]}-*fastq") \
+		"$dir"/concatenated/"${j[@]}"
 	# Renaming fastq files preparing format of Genotype.txt (output file) of
 	# Megasat:
 	rename 's/sub-Nreads\d+-Rep\d+-//' "$dir"/concatenated/"${j}"/*.fastq
 	# Running Megasat for each treatment:
-	perl MEGASAT_Genotype.pl primer_input_megasat_Mic_coverage.csv 2 5 1 \ "$dir"/concatenated/"${j}" "$dir"/concatenated/"${j}"
+	perl MEGASAT_Genotype.pl primer_input_megasat_Mic_coverage.csv 2 5 1 \
+		"$dir"/concatenated/"${j}" "$dir"/concatenated/"${j}"
 done
 
 ## Creating a new directory to copy Megasat's results on it and renaming each

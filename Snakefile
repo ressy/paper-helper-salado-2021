@@ -107,6 +107,65 @@ rule chiimp_make_locus_attrs:
                         "Primer": row["Forward primer (5' -> 3')"],
                         "ReversePrimer": row["Reverse primer (5' -> 3')"]})
 
+### MEGASAT
+
+rule megasat:
+    output: directory("analysis/megasat/output")
+    input:
+        data=expand("analysis/megasat/input/{sample}.{read}.fastq", sample=SAMPLE_MAP.keys(), read=["1", "2"]),
+        primers="analysis/megasat/primers.tsv"
+    params:
+        input_dir="analysis/megasat/input",
+        min_mismatches=2,
+        min_depth=5,
+        output_dir=""
+    threads: 4
+    # From the perl source if six args are given:
+    # ($inputPrimers,$mismatches,$m_depth,$max_processors,$dataset,$saveDir)= @ARGV;
+    shell:
+        """
+            mkdir {output}
+            perl "MEGASAT/MEGASAT_1.0 for Linux/MEGASAT_Genotype.pl" {input.primers} \
+                {params.min_mismatches} {params.min_depth} {threads} \
+                {params.input_dir} {output}
+        """
+
+rule megasat_input:
+    output: "analysis/megasat/input/{sample}.{read}.fastq"
+    input: "data/{sample}.{read}.fastq.gz"
+    shell: "gunzip < {input} > {output}"
+
+rule megasat_make_primers_file:
+    output: "analysis/megasat/primers.tsv"
+    input:
+        tableS1="from-paper/tableS1.csv",
+        extra="metadata/loci.csv"
+    run:
+        fields = [
+            "Locus Name",
+            "5' Microsatellite primer",
+            "reverse-complement of 3' microsatellite primer",
+            "3' flank", "5' flank",
+            "repeat_unit sequence",
+            "Ratios group"]
+        extra = {}
+        with open(input.extra) as f_in:
+            for row in DictReader(f_in):
+                extra[row["Locus"]] = row
+        with open(input.tableS1) as f_in, open(output[0], "wt") as f_out:
+            writer = DictWriter(f_out, fieldnames=fields, lineterminator="\n", delimiter="\t")
+            writer.writeheader()
+            for row in DictReader(f_in):
+                if row["Selected"] == "X":
+                    writer.writerow({
+                        "Locus Name": row["Locus name"],
+                        "5' Microsatellite primer": row["Forward primer (5' -> 3')"],
+                        "reverse-complement of 3' microsatellite primer": row["Reverse primer (5' -> 3')"],
+                        "3' flank": extra[row["Locus name"]]["FlankFwd"],
+                        "5' flank": extra[row["Locus name"]]["FlankRev"],
+                        "repeat_unit sequence": extra[row["Locus name"]]["Motif"],
+                        "Ratios group": ""})
+
 ### Trim adapters
 
 rule cutadapt_all:
